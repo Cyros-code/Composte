@@ -1,0 +1,90 @@
+CXX = g++
+#Adaption selon processeur cible ou force en cross compil
+#cross compil
+#ARCH := arm
+ARCH := $(shell uname -m)
+
+CXXFLAGS = -Wall -std=gnu++17 -O2 -Wno-write-strings -pthread
+
+# ARM 32 bits fix ABI warning
+ifneq (,$(findstring arm,$(ARCH)))
+    CXXFLAGS += -Wno-psabi
+#    CXX = arm-linux-gnueabihf-g++
+endif
+
+#binaires executables
+#capteurs seuls (sans Rest serveur)
+PROGS_SENSOR   = sapc_sensor
+
+#avec Rest serveur2 (authentification)
+PROGS_REST2  = sapc_rest2
+
+#pour compiler sources vers les librairies .a
+
+#rest_server2 (A adapter)
+LIB_REST2 = rest2
+SRC_REST2 = sapc_rest2_server.cpp
+OBJS_REST2 = $(SRC_REST2:.cpp=.o)
+
+#ina226 (A adapter)
+LIB_INA = ina
+SRC_INA = spac_ina226_base.cpp
+OBJS_INA = $(SRC_INA:.cpp=.o)
+
+#mcp3008 (A adapter)
+LIB_MCP = mcp
+SRC_MCP = sapc_mcp3008.cpp
+OBJS_MCP = $(SRC_MCP:.cpp=.o)
+
+#librairies (statiques)
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+#REST2
+librest2: $(OBJS_REST2)
+$(OBJS_REST2): $(SRC_REST2)
+	$(CXX) $(SRC_REST2)  $(CXXFLAGS) $(LDLIBS) -c
+	ar rcs lib$(LIB_REST2).a $(OBJS_REST2)
+
+#INA226
+libina: $(OBJS_INA)
+$(OBJS_INA): $(SRC_INA)
+	$(CXX) $(SRC_INA)  $(CXXFLAGS) $(LDLIBS) -c
+	ar rcs lib$(LIB_INA).a $(OBJS_INA)
+	
+#MCP3008
+libmcp: $(OBJS_MCP)
+$(OBJS_MCP): $(SRC_MCP)
+	$(CXX) $(SRC_MCP)  $(CXXFLAGS) $(LDLIBS) -c
+	ar rcs lib$(LIB_MCP).a $(OBJS_MCP)
+
+#Sources (y compris main()) 
+
+
+#le global (INA + MCP + REST ( A adapter) + BDD ( A adapter) )
+SRC_REST2_MAIN = main_rest2_sapc.cpp
+
+#juste pour tester le(les) capteur(s)
+SRC_INA_MCP_MAIN = sapc_main.cpp
+
+#compilation + edition de liens binaire final
+#capteurs seuls et capteur + serveur REST2 (avec authentification)
+all: $(PROGS_SENSOR) $(PROGS_REST2)
+
+$(PROGS_SENSOR): $(OBJS_INA) $(OBJS_MCP)
+	$(CXX) $(CXXFLAGS) $(LDLIBS) -o $@ $(SRC_INA_MCP_MAIN) -I. -L. -l$(LIB_INA) -l$(LIB_MCP)
+
+#rest avec Authentification en plus (seul la lib change cote serveur , donc main() identique.
+$(PROGS_REST2): $(OBJS_INA) $(OBJS_MCP) $(OBJS_REST2)
+	$(CXX) $(CXXFLAGS) $(LDLIBS) -o $@ $(SRC_REST2_MAIN) -I. -L. -l$(LIB_INA) -l$(LIB_MCP) -l$(LIB_REST2)
+
+#efface uniquement les binaires (pas les librairies)
+clean:
+	rm -f $(PROGS_SENSOR) $(PROGS_REST2) core
+	
+#efface TOUT ! (librairies compris)	
+cleanall:
+	rm -f $(PROGS_SENSOR) $(PROGS_REST2) $(OBJS_INA) $(OBJS_MCP) $(OBJS_REST2) lib$(LIB_INA).a lib$(LIB_MCP).a lib$(LIB_REST2).a core
+		
+	
+	
